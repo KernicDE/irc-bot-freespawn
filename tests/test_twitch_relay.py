@@ -7,11 +7,12 @@ spec = importlib.util.spec_from_file_location(
 tw = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tw)
 
-IGN = tw.ignored_users("kernicnet", raw=None)
+IGN = tw.ignored_users(raw=None)
+OWN = tw.own_bot_pattern(raw=None)
 
 
-def relay(line, ignore=IGN):
-    return tw.format_relay(tw.parse_line(line), ignore)
+def relay(line, ignore=IGN, own=OWN):
+    return tw.format_relay(tw.parse_line(line), ignore, "kernicnet", own)
 
 
 def test_normal_message():
@@ -26,16 +27,30 @@ def test_action_message():
     assert relay("@display-name=Ada :ada!a@a PRIVMSG #c :\x01ACTION winkt\x01") == "[Twitch] * Ada winkt"
 
 
-def test_commands_bots_and_channel_owner_are_skipped():
+def test_commands_and_bots_are_skipped():
     assert relay("@display-name=Ada :ada!a@a PRIVMSG #c :!forum") is None
     assert relay("@display-name=Nightbot :nightbot!a@a PRIVMSG #c :Hi") is None
-    assert relay("@display-name=KernicNET :kernicnet!a@a PRIVMSG #c :Willkommen im Chat") is None
+
+
+def test_channel_owner_messages_are_relayed_but_overlay_bot_texts_are_not():
+    owner = "@display-name=KernicNET :kernicnet!k@k PRIVMSG #kernicnet :"
+    assert relay(owner + "hallo zusammen") == "[Twitch] KernicNET: hallo zusammen"
+    for bot_text in ("Willkommen im Chat, Ada! Bei uns geht es entspannt zu. !freespawn",
+                     "Danke für den Raid, Cy, und willkommen an alle 12! mehr dazu: !freespawn",
+                     "FreeSpawn: entspannte Gaming- und Tech-Community mit Forum, IRC und Mumble statt Discord: https://freespawn.de",
+                     "FreeSpawn-Forum für Guides, Fragen und Gaming-Talk: https://freespawn.de",
+                     "FreeSpawn im IRC: #freespawn auf Libera.Chat", "https://kernic.net"):
+        assert relay(owner + bot_text) is None, bot_text
+    # gleicher Text von einem anderen Nutzer wird normal weitergegeben
+    assert relay("@display-name=Ada :ada!a@a PRIVMSG #c :FreeSpawn: cool") == "[Twitch] Ada: FreeSpawn: cool"
+    # Filter abschaltbar
+    assert relay(owner + "Willkommen im Chat, Ada!", own=tw.own_bot_pattern(raw="")) is not None
 
 
 def test_ignore_list_can_be_emptied_or_changed():
-    assert tw.ignored_users("kernicnet", raw="") == set()
-    assert relay("@display-name=KernicNET :kernicnet!a@a PRIVMSG #c :hi", tw.ignored_users("kernicnet", raw="")) == "[Twitch] KernicNET: hi"
-    assert tw.ignored_users("kernicnet", raw=" Foo, bar ,") == {"foo", "bar"}
+    assert tw.ignored_users(raw="") == set()
+    assert relay("@display-name=Nightbot :nightbot!a@a PRIVMSG #c :hi", tw.ignored_users(raw="")) == "[Twitch] Nightbot: hi"
+    assert tw.ignored_users(raw=" Foo, bar ,") == {"foo", "bar"}
 
 
 def test_non_chat_lines_are_skipped():

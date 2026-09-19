@@ -8,9 +8,12 @@ Ist TWITCH_CHANNEL nicht gesetzt, tut das Plugin nichts.
 Optionale Umgebungsvariablen (.env):
   TWITCH_CHANNEL        Login-Name des Kanals, z.B. KernicNET (leer = aus)
   TWITCH_IGNORE_USERS   Komma-Liste von Twitch-Namen, die nicht weitergegeben
-                        werden (Standard: gängige Chat-Bots und der Kanal selbst,
-                        weil dort auch die Bot-Antworten des Overlays erscheinen).
-                        Leerer Wert = niemanden ignorieren.
+                        werden (Standard: gängige Chat-Bots). Leerer Wert = niemanden.
+  TWITCH_OWN_BOT_REGEX  Regex für Texte des Kanal-Accounts, die NICHT weitergegeben
+                        werden: das OBS-Overlay postet seine Bot-Antworten (Begrüßung,
+                        Raid-Dank, !freespawn/!forum/... ) unter dem Konto des Streamers.
+                        Standard passt auf genau diese Texte; leerer Wert = alles
+                        weitergeben.
 
 Nicht weitergegeben werden ausserdem Befehle (Nachrichten mit "!" am Anfang).
 Damit ein Chat-Ansturm den IRC-Channel nicht flutet, geht höchstens eine Zeile
@@ -39,6 +42,9 @@ RELAY_GAP = 1.0         # Sekunden zwischen zwei Zeilen im IRC
 QUEUE_SIZE = 100
 READ_TIMEOUT = 420      # Twitch pingt ca. alle 5 Minuten; länger still = Verbindung tot
 DEFAULT_IGNORED = "nightbot,streamelements,streamlabs,moobot,fossabot,wizebot"
+# Texte, die das OBS-Overlay (chat_bot_logic.py / chat_commands.csv) unter dem Konto des Streamers postet.
+DEFAULT_OWN_BOT_REGEX = (r"^(Willkommen im Chat, |Danke für den Raid, |FreeSpawn(-| im |: )|"
+                         r"https?://\S+$|Lecker Soft|Entdecke die Welt)")
 
 _IRC_COLOR = re.compile(r"\x03(?:\d{1,2}(?:,\d{1,2})?)?")
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
@@ -88,30 +94,52 @@ def _clean(text):
     return text
 
 
-def ignored_users(channel, raw=None):
+def ignored_users(raw=None):
     """Menge der ignorierten Twitch-Namen (klein geschrieben)."""
     raw = os.environ.get("TWITCH_IGNORE_USERS") if raw is None else raw
     if raw is None:
-        raw = DEFAULT_IGNORED + "," + channel
+        raw = DEFAULT_IGNORED
     return {name.strip().lower() for name in raw.split(",") if name.strip()}
 
 
-def format_relay(msg, ignore):
-    """Aus einer geparsten Zeile den IRC-Text bauen, oder None (nicht weitergeben)."""
+def own_bot_pattern(raw=None):
+    """Kompiliertes Muster für Bot-Texte des Kanal-Accounts (None = nichts filtern)."""
+    raw = os.environ.get("TWITCH_OWN_BOT_REGEX") if raw is None else raw
+    if raw is None:
+        raw = DEFAULT_OWN_BOT_REGEX
+    return re.compile(raw) if raw else None
+
+
+def decide(msg, ignore, channel="", own_bot=None):
+    """Entscheidet über eine geparste Zeile: (IRC-Text, None) oder (None, Grund).
+
+    Grund None = keine Chat-Nachricht (still übergehen), sonst kurzer Text fürs Log.
+    """
     if msg["command"] != "PRIVMSG" or not msg["text"]:
-        return None
+        return None, None
     nick = msg["nick"].lower()
     name = _clean(msg["tags"].get("display-name") or msg["nick"])
-    if nick in ignore or name.lower() in ignore or not name:
-        return None
+    if not name:
+        return None, "kein Name"
+    if nick in ignore or name.lower() in ignore:
+        return None, "Nutzer ignoriert"
     text = msg["text"]
     action = text.startswith("\x01ACTION ") and text.endswith("\x01")
     if action:
         text = text[len("\x01ACTION "):-1]
     text = _clean(text)
-    if not text or text.startswith("!"):
-        return None
-    return f"[Twitch] * {name} {text}" if action else f"[Twitch] {name}: {text}"
+    if not text:
+        return None, "leer"
+    if text.startswith("!"):
+        return None, "Befehl"
+    if own_bot and nick == channel.lower() and own_bot.search(text):
+        return None, "Bot-Antwort des Overlays"
+    return (f"[Twitch] * {name} {text}" if action else f"[Twitch] {name}: {text}"), None
+
+
+def format_relay(msg, ignore, channel="", own_bot=None):
+    """Nur der IRC-Text aus decide(), oder None."""
+    return decide(msg, ignore, channel, own_bot)[0]
 
 
 class TwitchRelay:
@@ -120,18 +148,23 @@ class TwitchRelay:
     def __init__(self, bot, channel):
         self.bot = bot
         self.channel = channel.lower().lstrip("#")
-        self.ignore = ignored_users(self.channel)
+        self.ignore = ignored_users()
+        self.own_bot = own_bot_pattern()
         self.outbox = queue.Queue(maxsize=QUEUE_SIZE)
 
     def handle_line(self, line):
         """Verarbeitet eine Zeile vom Twitch-Server; gibt den eingereihten Text zurück (oder None)."""
-        text = format_relay(parse_line(line), self.ignore)
+        msg = parse_line(line)
+        text, reason = decide(msg, self.ignore, self.channel, self.own_bot)
+        if reason:
+            LOGGER.info("Twitch-Nachricht von %s übersprungen: %s", msg["nick"], reason)
         if text:
             try:
                 self.outbox.put_nowait(text)
             except queue.Full:
                 LOGGER.warning("Relay-Warteschlange voll, Nachricht verworfen")
                 return None
+            LOGGER.info("Twitch -> IRC: %s", text)
         return text
 
     def start(self):
