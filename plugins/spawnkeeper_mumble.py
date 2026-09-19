@@ -14,9 +14,11 @@ try:
     # schlägt immer fehl.
     import pymumble_py3 as pymumble
     from pymumble_py3 import constants as pymumble_constants
+    from pymumble_py3.errors import UnknownChannelError
     PYMUMBLE_AVAILABLE = True
 except ImportError:
     PYMUMBLE_AVAILABLE = False
+    UnknownChannelError = KeyError  # nur Platzhalter, ohne pymumble läuft das Plugin nicht
 
 MUMBLE_HOST = "mumble-freespawn"
 MUMBLE_PORT = 64738
@@ -146,10 +148,22 @@ class MumbleClientThread(threading.Thread):
                 if time.time() - down_since > 90:
                     return  # pymumbles eigener Reconnect hat es nicht geschafft: frischer Client
 
+    def _find_channel(self, name):
+        """Kanal per Name oder None.
+
+        pymumble wirft UnknownChannelError ("Channel AFK does not exists"), statt None
+        zu liefern - besonders direkt nach einem (Re-)Connect, solange die Kanalliste
+        noch leer ist. Genau diese Ausnahme hat früher den ganzen Mumble-Thread beendet.
+        """
+        try:
+            return self.mumble.channels.find_by_name(name)
+        except UnknownChannelError:
+            return None
+
     def _ensure_parked_in_afk(self):
         if not self.mumble:
             return
-        afk = self.mumble.channels.find_by_name(AFK_CHANNEL_NAME)
+        afk = self._find_channel(AFK_CHANNEL_NAME)
         if not afk:
             return
         try:
@@ -203,7 +217,7 @@ class MumbleClientThread(threading.Thread):
             self._move_other_user(session, channel["channel_id"])
 
     def _afk_channel_id(self):
-        channel = self.mumble.channels.find_by_name(AFK_CHANNEL_NAME)
+        channel = self._find_channel(AFK_CHANNEL_NAME)
         return channel["channel_id"] if channel else None
 
     def _update_user_list(self):
@@ -254,7 +268,7 @@ class MumbleClientThread(threading.Thread):
         # bereits existierenden Unterkanal davon), automatisch in einen
         # nummerierten Unterkanal weiterleiten.
         for parent_name in AUTOSPLIT_PARENTS:
-            parent = self.mumble.channels.find_by_name(parent_name)
+            parent = self._find_channel(parent_name)
             if parent and current_channel_id == parent["channel_id"]:
                 self._handle_autosplit(session, parent)
                 break
