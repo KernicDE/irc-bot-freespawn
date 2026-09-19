@@ -289,7 +289,9 @@ class MumbleClientThread(threading.Thread):
                 self.mumble.users[session].unmute()
                 self.mumble.users[session].undeafen()
 
-        is_afk = bool(user.get("self_deaf") or user.get("self_mute") or in_afk_channel)
+        # AFK ist man nur im AFK-Channel. Selbst stummgeschaltet (Mikro/Ton aus) heisst
+        # nicht abwesend: wer nur das Mikro oder die Ausgabe ausmacht, bleibt aktiv.
+        is_afk = in_afk_channel
         if is_afk and name not in self.afk_users:
             self.afk_users.add(name)
             self.bot.say(f"[Mumble] {name} ist jetzt AFK.", IRC_CHANNEL)
