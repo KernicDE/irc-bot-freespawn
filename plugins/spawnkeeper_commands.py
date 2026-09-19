@@ -9,7 +9,7 @@ from sopel import module
 def help_cmd(bot, trigger):
     bot.say(
         "Verfügbare Befehle: "
-        "!users/!user (Mumble-Userzahl), !mumble/!voice (Server-Info), !forum (Forum-Link), "
+        "!users/!user (wer ist in Mumble, mit Kanal), !mumble/!voice (Server-Info), !forum (Forum-Link), "
         "!irc (Channel-Info), !rules/!regeln (Regeln), !apply/!bewerben (Bewerbung), !next (nächster Termin)"
     )
 
@@ -50,12 +50,18 @@ def next_cmd(bot, trigger):
     bot.say("Der nächste Clan-Termin wird im Forum im Tag 'news' angekündigt.")
 
 
+def format_users(channels):
+    """Text für !users. channels: Liste aus (Kanalname, [Namen]) oder None (keine Verbindung)."""
+    if channels is None:
+        return "Der Mumble-Status ist gerade nicht verfügbar."
+    count = sum(len(names) for _, names in channels)
+    if count == 0:
+        return "Mumble ist aktuell leer."
+    parts = [f"{channel}: {', '.join(names)}" for channel, names in channels]
+    return f"Aktuell auf Mumble: {count} User – " + " | ".join(parts)
+
+
 @module.commands('users', 'user')
 @module.example('!users')
 def users_cmd(bot, trigger):
-    count = bot.memory.get('mumble_user_count', 0)
-    names = bot.memory.get('mumble_user_names', [])
-    if count == 0:
-        bot.say("Mumble ist aktuell leer.")
-    else:
-        bot.say(f"Aktuell auf Mumble: {count} User ({', '.join(names)})")
+    bot.say(format_users(bot.memory.get('mumble_user_channels')))

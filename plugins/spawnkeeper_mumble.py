@@ -52,6 +52,25 @@ AUTOSPLIT_PARENTS = ("On-Air", "Gaming")
 AUTOSPLIT_MAX_USERS = 6
 
 
+def group_users_by_channel(users, channels, skip_name=MUMBLE_NICK):
+    """Liste aus (Kanalname, [Usernamen]) für die aktuell verbundenen User.
+
+    Der Bot selbst (skip_name) wird ausgelassen. Kanäle stehen in Reihenfolge ihrer
+    ID (entspricht dem Baum, temporäre Unterkanäle kommen hinten), Namen alphabetisch.
+    """
+    grouped = {}
+    for user in users.values():
+        name = user.get("name", "Unbekannt")
+        if name == skip_name:
+            continue
+        grouped.setdefault(user.get("channel_id", 0), []).append(name)
+    result = []
+    for channel_id in sorted(grouped):
+        channel = channels.get(channel_id) or {}
+        result.append((channel.get("name") or "Unbekannt", sorted(grouped[channel_id], key=str.lower)))
+    return result
+
+
 class MumbleClientThread(threading.Thread):
     def __init__(self, bot):
         super().__init__(daemon=True)
@@ -89,6 +108,7 @@ class MumbleClientThread(threading.Thread):
                 self.bot.say("[Mumble] Verbindung unterbrochen, ich versuche es erneut.", IRC_CHANNEL)
                 self.announced_down = True
             self._stop_client()
+            self.bot.memory["mumble_user_channels"] = None  # !users: "nicht verfügbar" statt veralteter Liste
             time.sleep(RECONNECT_DELAY)
 
     def _stop_client(self):
@@ -223,16 +243,11 @@ class MumbleClientThread(threading.Thread):
     def _update_user_list(self):
         if not self.mumble:
             return
-        users = self.mumble.users
-        names = []
-        count = 0
-        for user_id, user in users.items():
-            name = user.get("name", "Unbekannt")
-            if name == MUMBLE_NICK:
-                continue  # Bot selbst nicht mitzählen
-            names.append(name)
-            count += 1
-        self.bot.memory["mumble_user_count"] = count
+        # Bot selbst wird nicht mitgezählt (siehe group_users_by_channel)
+        channels = group_users_by_channel(self.mumble.users, self.mumble.channels)
+        names = [name for _, members in channels for name in members]
+        self.bot.memory["mumble_user_channels"] = channels
+        self.bot.memory["mumble_user_count"] = len(names)
         self.bot.memory["mumble_user_names"] = names
 
     def _user_created(self, user, action=None):
