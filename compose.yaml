@@ -1,15 +1,15 @@
 services:
   irc-bot:
-    image: ghcr.io/kernicde/dlivr-it-irc-bot:latest
-    container_name: irc-bot-dlivr-it
+    image: ghcr.io/kernicde/freespawn-irc-bot:latest
+    container_name: irc-bot-freespawn
     restart: unless-stopped
     env_file:
       - .env
     volumes:
       - ./data:/bot/data
     networks:
-      - dlivr-net
+      - freespawn-net
 
 networks:
-  dlivr-net:
+  freespawn-net:
     external: true

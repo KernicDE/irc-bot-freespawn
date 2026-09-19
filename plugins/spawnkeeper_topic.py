@@ -1,5 +1,5 @@
 """
-Hält Op-Status und Topic von #dlivr dauerhaft aufrecht.
+Hält Op-Status und Topic von #freespawn dauerhaft aufrecht.
 
 ChanServ vergibt Op über die FLAGS (+AO für den identifizierten Account)
 eigentlich automatisch beim Join, aber das kann mit spürbarer Verzögerung
@@ -9,14 +9,14 @@ ChanServ an ("/msg ChanServ OP"), statt nur passiv zu warten. Für TOPIC
 braucht er zwingend Op, sonst schlägt der Befehl mit "482 You're not a
 channel operator" fehl und wird stillschweigend ignoriert.
 
-Voraussetzung: `/msg ChanServ FLAGS #dlivr <bot-nick> +AO` muss einmalig
+Voraussetzung: `/msg ChanServ FLAGS #freespawn <bot-nick> +AO` muss einmalig
 vom Channel-Founder gesetzt sein, sonst antwortet ChanServ auf die
 OP-Anfrage mit "You are not authorized to perform this operation."
 """
 from sopel import module
 
-CHANNEL = '#dlivr'
-TOPIC = "dlivr.it Clan Channel | Forum: https://dlivr.it | Mumble: dlivr.it:64738"
+CHANNEL = '#freespawn'
+TOPIC = "FreeSpawn Clan Channel | Forum: https://freespawn.de | Mumble: freespawn.de:64738"
 
 
 def _ensure_op(bot):

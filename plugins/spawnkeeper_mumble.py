@@ -1,6 +1,6 @@
 """
 Mumble-Integration für den IRC-Bot.
-Verbindet sich mit dem Murmur-Server und postet Events in #dlivr.
+Verbindet sich mit dem Murmur-Server und postet Events in #freespawn.
 """
 import os
 import threading
@@ -18,10 +18,10 @@ try:
 except ImportError:
     PYMUMBLE_AVAILABLE = False
 
-MUMBLE_HOST = "mumble-dlivr-it"
+MUMBLE_HOST = "mumble-freespawn"
 MUMBLE_PORT = 64738
 # Der Bot verbindet sich als SuperUser (Passwort aus MUMBLE_SUPERUSER_PASSWORD,
-# muss mit mumble-dlivr-it/.env übereinstimmen), um User im AFK-Channel
+# muss mit mumble-freespawn/.env übereinstimmen), um User im AFK-Channel
 # automatisch muten zu können - SuperUser umgeht dafür alle ACL-Prüfungen.
 # Bewusster Tradeoff: einfacher als ein dediziertes Bot-Konto mit
 # Minimal-Rechten, dafür hat der Bot damit volle Admin-Macht über den
@@ -31,7 +31,7 @@ MUMBLE_PORT = 64738
 # Join/Leave/AFK-Meldungen) heraus.
 MUMBLE_NICK = "SuperUser"
 MUMBLE_PASSWORD = os.environ.get("MUMBLE_SUPERUSER_PASSWORD", "")
-MUMBLE_CHANNEL = "dlivr"
+MUMBLE_CHANNEL = "FreeSpawn"
 AFK_CHANNEL_NAME = "AFK"
 # Der eigens versteckte "SuperUser"-Channel wurde wieder entfernt - Mumble
 # schickt die komplette Channel-Struktur ohnehin an jeden Client, egal
@@ -39,7 +39,7 @@ AFK_CHANNEL_NAME = "AFK"
 # Ein "unsichtbarer" Channel war also nie erreichbar. Der Bot parkt sich
 # stattdessen einfach in AFK - dort ist er wenigstens thematisch am
 # richtigen Platz statt sichtbar in Lounge/Gaming rumzustehen.
-IRC_CHANNEL = "#dlivr"
+IRC_CHANNEL = "#freespawn"
 
 # Wer direkt in einen dieser Channel wechselt, landet automatisch in einem
 # nummerierten Unterkanal (z.B. "Gaming #1") statt im Sammelkanal selbst -

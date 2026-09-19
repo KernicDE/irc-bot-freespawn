@@ -1,12 +1,12 @@
 """
 Forum-RSS-Polling für den IRC-Bot.
-Postet neue Diskussionen aus dem globalen, unauthentifizierten Feed in #dlivr.
+Postet neue Diskussionen aus dem globalen, unauthentifizierten Feed in #freespawn.
 Da der Feed ohne Login abgerufen wird, enthält er automatisch genau die
 Diskussionen, die auch ein Gast ohne Anmeldung sehen könnte - unabhängig
 davon, welche Tags gerade wie eingeschränkt sind.
 
 Der Feed liefert pro Diskussion den jeweils neuesten Post (Eintrags-ID
-enthält die Post-Nummer, z.B. https://dlivr.it/d/19/2). Jede neue Antwort
+enthält die Post-Nummer, z.B. https://freespawn.de/d/19/2). Jede neue Antwort
 bekommt dadurch eine eigene Eintrags-ID und wird - gewollt - als eigener
 Post gemeldet: es soll jeder einzelne Beitrag im Channel erscheinen, nicht
 nur der erste eines Threads.
@@ -28,10 +28,10 @@ import urllib.request
 import feedparser
 from sopel import module
 
-IRC_CHANNEL = "#dlivr"
+IRC_CHANNEL = "#freespawn"
 DB_PATH = "/bot/data/seen_entries.sqlite"
 FEED_NAME = "all"
-FORUM_BASE_URL = "https://dlivr.it"
+FORUM_BASE_URL = "https://freespawn.de"
 FEED_URL = f"{FORUM_BASE_URL}/atom"
 POLL_INTERVAL = 60  # Sekunden
 
@@ -40,7 +40,7 @@ _ENTRY_ID_RE = re.compile(r"/d/(\d+)/(\d+)/?$")
 
 def _parse_entry_id(entry_id):
     """Liefert (discussion_id, post_number) aus einer Eintrags-ID wie
-    'https://dlivr.it/d/19/2' -> ('19', 2). Liefert (None, None), falls das
+    'https://freespawn.de/d/19/2' -> ('19', 2). Liefert (None, None), falls das
     Format mal nicht passt (z.B. nach einem Feed-Wechsel)."""
     match = _ENTRY_ID_RE.search(entry_id)
     if not match:
@@ -69,7 +69,7 @@ def _mentioned_user(discussion_id, post_number, author):
                 return match.group(1)
             break
     except Exception as exc:
-        print(f"[dit_forum] Konnte Mention nicht ermitteln (kein Problem, wird einfach weggelassen): {exc}")
+        print(f"[spawnkeeper_forum] Konnte Mention nicht ermitteln (kein Problem, wird einfach weggelassen): {exc}")
     return None
 
 
@@ -116,7 +116,7 @@ def _poll_feed(bot):
     except Exception as exc:
         # Nicht per bot.say melden: Ein dauerhafter Fehler würde sonst bei
         # jedem Poll-Intervall (60s) erneut in den Channel spammen.
-        print(f"[dit_forum] RSS-Fehler beim Abruf von {FEED_URL}: {exc}")
+        print(f"[spawnkeeper_forum] RSS-Fehler beim Abruf von {FEED_URL}: {exc}")
         return
 
     for entry in parsed.entries:
@@ -152,7 +152,7 @@ def _poll_feed(bot):
         try:
             bot.say(message, IRC_CHANNEL)
         except Exception as exc:
-            print(f"[dit_forum] Konnte Eintrag nicht posten, versuche es beim nächsten Poll erneut: {exc}")
+            print(f"[spawnkeeper_forum] Konnte Eintrag nicht posten, versuche es beim nächsten Poll erneut: {exc}")
             continue
 
         _mark_seen(FEED_NAME, entry_id, title, link, published)
@@ -168,7 +168,7 @@ def _poll_loop(bot):
             # Ohne dieses Netz würde eine einzelne unerwartete Exception den
             # kompletten Poll-Thread lautlos für immer beenden (Container
             # läuft weiter, es wird aber nie wieder gepollt).
-            print(f"[dit_forum] Unerwarteter Fehler im Poll-Loop, mache beim nächsten Intervall weiter: {exc}")
+            print(f"[spawnkeeper_forum] Unerwarteter Fehler im Poll-Loop, mache beim nächsten Intervall weiter: {exc}")
         time.sleep(POLL_INTERVAL)
 
 

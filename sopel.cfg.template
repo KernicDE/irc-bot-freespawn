@@ -1,19 +1,19 @@
 [core]
-nick = dlivr-it
+nick = SpawnKeeper
 prefix = !
 host = irc.libera.chat
 port = 6697
 use_ssl = true
 verify_ssl = true
-channels = #dlivr
+channels = #freespawn
 extra = /bot/plugins
 # Sopels eingebautes "help"-Plugin kollidiert mit unserem eigenen !help
 # (beide reagieren auf den Trigger -> doppelte Antwort, einmal im Channel
-# von sopel-help, einmal von uns). Deaktiviert, unser dit_commands.help_cmd
+# von sopel-help, einmal von uns). Deaktiviert, unser spawnkeeper_commands.help_cmd
 # deckt das ab.
 exclude = help
 auth_method = nickserv
-auth_username = dlivr-it
+auth_username = SpawnKeeper
 auth_password = ${NICKSERV_PASSWORD}
 owner = nicolas
 # Logs werden ins data-Volume geschrieben

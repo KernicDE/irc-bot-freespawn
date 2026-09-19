@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  IMAGE_NAME: ghcr.io/kernicde/dlivr-it-irc-bot
+  IMAGE_NAME: ghcr.io/kernicde/freespawn-irc-bot
 
 jobs:
   build-and-push:

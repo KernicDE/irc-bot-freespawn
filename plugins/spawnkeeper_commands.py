@@ -1,5 +1,5 @@
 """
-Öffentliche IRC-Befehle für #dlivr.
+Öffentliche IRC-Befehle für #freespawn.
 """
 from sopel import module
 
@@ -17,19 +17,19 @@ def help_cmd(bot, trigger):
 @module.commands('mumble', 'voice')
 @module.example('!mumble')
 def mumble_cmd(bot, trigger):
-    bot.say("Mumble-Server: dlivr.it:64738 | Verbinde dich und stell dich kurz vor.")
+    bot.say("Mumble-Server: freespawn.de:64738 | Verbinde dich und stell dich kurz vor.")
 
 
 @module.commands('forum')
 @module.example('!forum')
 def forum_cmd(bot, trigger):
-    bot.say("Forum: https://dlivr.it")
+    bot.say("Forum: https://freespawn.de")
 
 
 @module.commands('irc')
 @module.example('!irc')
 def irc_cmd(bot, trigger):
-    bot.say("Wir sind auf irc.libera.chat im Channel #dlivr. Registriere deinen Nick mit /msg NickServ REGISTER.")
+    bot.say("Wir sind auf irc.libera.chat im Channel #freespawn. Registriere deinen Nick mit /msg NickServ REGISTER.")
 
 
 @module.commands('rules', 'regeln')
@@ -41,7 +41,7 @@ def rules_cmd(bot, trigger):
 @module.commands('apply', 'bewerben')
 @module.example('!apply')
 def apply_cmd(bot, trigger):
-    bot.say("Bewirb dich im Forum unter https://dlivr.it/t/applications (nur für registrierte Mitglieder sichtbar).")
+    bot.say("Bewirb dich im Forum unter https://freespawn.de/t/applications (nur für registrierte Mitglieder sichtbar).")
 
 
 @module.commands('next')
