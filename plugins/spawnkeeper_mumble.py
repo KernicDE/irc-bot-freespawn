@@ -32,6 +32,7 @@ MUMBLE_PORT = 64738
 MUMBLE_NICK = "SuperUser"
 MUMBLE_PASSWORD = os.environ.get("MUMBLE_SUPERUSER_PASSWORD", "")
 MUMBLE_CHANNEL = "FreeSpawn"
+RECONNECT_DELAY = 20  # Sekunden zwischen Neuaufbau-Versuchen der Mumble-Sitzung
 AFK_CHANNEL_NAME = "AFK"
 # Der eigens versteckte "SuperUser"-Channel wurde wieder entfernt - Mumble
 # schickt die komplette Channel-Struktur ohnehin an jeden Client, egal
@@ -58,47 +59,92 @@ class MumbleClientThread(threading.Thread):
         self.afk_users = set()
         self.muted_in_afk = set()  # session_ids, die wir wegen AFK-Channel gemutet haben
         self.pending_autosplit = {}  # neuer Channel-Name -> wartende session_id
+        self.announced_down = False  # Ausfall wurde schon im IRC gemeldet
 
     def run(self):
+        """Hält die Mumble-Verbindung dauerhaft aufrecht.
+
+        Früher lief alles in einem einzigen try-Block: Warf irgendetwas beim
+        Neuverbinden eine Ausnahme (z.B. während der Mumble-Server neu startet,
+        etwa nach einem Zertifikats-Sync), endete der Thread für immer und der
+        Bot blieb bis zum nächsten Container-Neustart getrennt. Jetzt baut ein
+        Supervisor die Sitzung bei jedem Fehler oder dauerhaftem Verbindungs-
+        verlust mit einem frischen Client neu auf.
+        """
         if not PYMUMBLE_AVAILABLE:
             self.bot.say("[Mumble] pymumble ist nicht installiert.", IRC_CHANNEL)
             return
 
+        while True:
+            try:
+                self._run_session()
+                reason = "Verbindung zum Mumble-Server verloren"
+            except Exception as exc:  # pragma: no cover
+                reason = f"Fehler: {exc!r}"
+            print(f"[spawnkeeper_mumble] {reason}, neuer Versuch in {RECONNECT_DELAY}s")
+            if not self.announced_down:
+                # nur einmal pro Störung melden, sonst spammt der Bot bei längerem Ausfall
+                self.bot.say("[Mumble] Verbindung unterbrochen, ich versuche es erneut.", IRC_CHANNEL)
+                self.announced_down = True
+            self._stop_client()
+            time.sleep(RECONNECT_DELAY)
+
+    def _stop_client(self):
         try:
-            self.mumble = pymumble.Mumble(
-                MUMBLE_HOST, MUMBLE_NICK, port=MUMBLE_PORT,
-                password=MUMBLE_PASSWORD, reconnect=True,
-            )
-            self.mumble.start()
-            self.mumble.is_ready()
-            self.mumble.set_bandwidth(96000)
-
-            self._ensure_parked_in_afk()
-
-            # WICHTIG: mumble.callbacks(...) ist NICHT die Registrierung, sondern
-            # ein __call__-Shortcut für call_callback() (löst bereits registrierte
-            # Callbacks aus!). Ohne registrierte Funktion ist das ein stiller No-op -
-            # deshalb feuerten Join/Leave/AFK-Meldungen nie. Registrieren geht über
-            # set_callback()/add_callback() auf dem callbacks-Objekt.
-            self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_USERCREATED, self._user_created)
-            self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_USERREMOVED, self._user_removed)
-            self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_USERUPDATED, self._user_updated)
-            # CONNECTED feuert bei JEDEM (Re-)Connect, auch bei pymumbles
-            # eigener reconnect=True-Logik nach einem Mumble-Server-Neustart -
-            # ohne diesen Hook landet der Bot nach so einem Reconnect im
-            # DEFAULTCHANNEL (Lounge) und bleibt dort für alle sichtbar hängen,
-            # weil move_in() sonst nur einmal beim allerersten Start läuft.
-            self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_CONNECTED, self._on_connected)
-            self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_CHANNELCREATED, self._channel_created)
-
-            self._update_user_list()
-
-            while True:
-                time.sleep(5)
-                self._ensure_parked_in_afk()
-                self._update_user_list()
+            if self.mumble:
+                self.mumble.stop()
         except Exception as exc:  # pragma: no cover
-            self.bot.say(f"[Mumble] Verbindungsfehler: {exc}", IRC_CHANNEL)
+            print(f"[spawnkeeper_mumble] Konnte alten Client nicht sauber beenden: {exc!r}")
+        self.mumble = None
+
+    def _run_session(self):
+        self.mumble = pymumble.Mumble(
+            MUMBLE_HOST, MUMBLE_NICK, port=MUMBLE_PORT,
+            password=MUMBLE_PASSWORD, reconnect=True,
+        )
+        self.mumble.start()
+        self.mumble.is_ready()
+        self.mumble.set_bandwidth(96000)
+
+        self._ensure_parked_in_afk()
+
+        # WICHTIG: mumble.callbacks(...) ist NICHT die Registrierung, sondern
+        # ein __call__-Shortcut für call_callback() (löst bereits registrierte
+        # Callbacks aus!). Ohne registrierte Funktion ist das ein stiller No-op -
+        # deshalb feuerten Join/Leave/AFK-Meldungen nie. Registrieren geht über
+        # set_callback()/add_callback() auf dem callbacks-Objekt.
+        self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_USERCREATED, self._user_created)
+        self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_USERREMOVED, self._user_removed)
+        self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_USERUPDATED, self._user_updated)
+        # CONNECTED feuert bei JEDEM (Re-)Connect, auch bei pymumbles
+        # eigener reconnect=True-Logik nach einem Mumble-Server-Neustart -
+        # ohne diesen Hook landet der Bot nach so einem Reconnect im
+        # DEFAULTCHANNEL (Lounge) und bleibt dort für alle sichtbar hängen,
+        # weil move_in() sonst nur einmal beim allerersten Start läuft.
+        self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_CONNECTED, self._on_connected)
+        self.mumble.callbacks.set_callback(pymumble_constants.PYMUMBLE_CLBK_CHANNELCREATED, self._channel_created)
+
+        self._update_user_list()
+        if self.announced_down:
+            self.bot.say("[Mumble] Verbindung wiederhergestellt.", IRC_CHANNEL)
+            self.announced_down = False
+
+        down_since = None
+        while True:
+            time.sleep(5)
+            if self.mumble.connected == pymumble_constants.PYMUMBLE_CONN_STATE_CONNECTED:
+                down_since = None
+                try:
+                    self._ensure_parked_in_afk()
+                    self._update_user_list()
+                except (KeyError, TypeError, AttributeError) as exc:
+                    # Kurz nach einem Reconnect sind Kanal-/Userlisten noch leer -
+                    # das darf die Sitzung nicht beenden, der nächste Durchlauf klappt.
+                    print(f"[spawnkeeper_mumble] Zwischenzustand nach (Re-)Connect, ignoriert: {exc!r}")
+            else:
+                down_since = down_since or time.time()
+                if time.time() - down_since > 90:
+                    return  # pymumbles eigener Reconnect hat es nicht geschafft: frischer Client
 
     def _ensure_parked_in_afk(self):
         if not self.mumble:

@@ -16,7 +16,7 @@ OP-Anfrage mit "You are not authorized to perform this operation."
 from sopel import module
 
 CHANNEL = '#freespawn'
-TOPIC = "FreeSpawn Clan Channel | Forum: https://freespawn.de | Mumble: freespawn.de:64738"
+TOPIC = "#FreeSpawn | Forum: https://freespawn.de | Mumble: freespawn.de:64738"
 
 
 def _ensure_op(bot):
