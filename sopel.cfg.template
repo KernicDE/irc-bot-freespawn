@@ -12,7 +12,12 @@ extra = /bot/plugins
 # von sopel-help, einmal von uns). Deaktiviert, unser spawnkeeper_commands.help_cmd
 # deckt das ab.
 exclude = help
-auth_method = nickserv
+# SASL statt NickServ-IDENTIFY: der Bot ist schon vor der Registrierung im
+# Account eingeloggt, egal unter welchem Nick er gerade läuft. Nur so kann er
+# nach einem Reconnect mit belegtem Nick per NickServ REGAIN zurückholen
+# (Sopels eigener GHOST-Pfad benennt sich danach nie zurück, siehe
+# spawnkeeper_topic.py) und ChanServ gibt direkt beim Join Op.
+auth_method = sasl
 auth_username = SpawnKeeper
 auth_password = ${NICKSERV_PASSWORD}
 owner = nicolas

@@ -1,5 +1,14 @@
 """
-Hält Op-Status und Topic von #freespawn dauerhaft aufrecht.
+Hält Nick, Op-Status und Topic von #freespawn dauerhaft aufrecht.
+
+Nick: Nach einem Ping-Timeout verbindet Sopel sich neu, während die alte
+Verbindung serverseitig noch lebt - der Nick ist belegt und der Bot heißt
+dann SpawnKeeper_. Sopel holt den Nick nur zurück, wenn es das QUIT der
+alten Session sieht, was praktisch nie passiert (noch kein gemeinsamer
+Channel). Deshalb prüft der Bot selbst per ISON, ob der konfigurierte Nick
+frei ist: frei -> NICK, belegt -> NickServ REGAIN (wirft die alte Session
+raus und benennt uns um; geht ohne Passwort, weil per SASL eingeloggt).
+Bewusst kein blindes NICK: ein 433 würde Sopel zu SpawnKeeper__ umbenennen.
 
 ChanServ vergibt Op über die FLAGS (+AO für den identifizierten Account)
 eigentlich automatisch beim Join, aber das kann mit spürbarer Verzögerung
@@ -17,6 +26,39 @@ from sopel import module
 
 CHANNEL = '#freespawn'
 TOPIC = "#FreeSpawn | Forum: https://freespawn.de | Mumble: freespawn.de:64738"
+
+
+def _ensure_nick(bot):
+    if bot.nick != bot.make_identifier(bot.settings.core.nick):
+        bot.write(['ISON', bot.settings.core.nick])
+
+
+@module.event('001')  # RPL_WELCOME - Registrierung abgeschlossen
+def on_welcome(bot, trigger):
+    _ensure_nick(bot)
+
+
+@module.event('303')  # RPL_ISON - Antwort auf unsere ISON-Anfrage
+def on_ison(bot, trigger):
+    wanted = bot.settings.core.nick
+    if bot.nick == bot.make_identifier(wanted):
+        return
+    online = [bot.make_identifier(n) for n in trigger.args[-1].split()]
+    if bot.make_identifier(wanted) in online:
+        bot.say(f'REGAIN {wanted}', 'NickServ')
+    else:
+        bot.write(['NICK', wanted])
+
+
+@module.event('NICK')
+def on_nick(bot, trigger):
+    # Je nach Reihenfolge der Handler hat Sopel bot.nick schon aktualisiert
+    # oder noch nicht - beide Fälle abdecken, aber nicht auf Fremde reagieren.
+    wanted = bot.make_identifier(bot.settings.core.nick)
+    new = bot.make_identifier(trigger.args[-1])
+    if new == wanted and (trigger.nick == bot.nick or bot.nick == wanted):
+        if CHANNEL in bot.channels:
+            _ensure_op_and_topic(bot)
 
 
 def _ensure_op(bot):
@@ -56,9 +98,12 @@ def on_mode_change(bot, trigger):
         _ensure_op_and_topic(bot)
 
 
-@module.interval(300)  # alle 5 Minuten selbst nachsehen, statt nur auf Events zu warten
+@module.interval(60)  # jede Minute selbst nachsehen, statt nur auf Events zu warten
 def check_topic(bot):
-    if bot.connection_registered and CHANNEL in bot.channels:
+    if not bot.connection_registered:
+        return
+    _ensure_nick(bot)
+    if CHANNEL in bot.channels:
         _ensure_op_and_topic(bot)
 
 
@@ -67,4 +112,5 @@ def check_topic(bot):
 @module.example('!settopic')
 def settopic_cmd(bot, trigger):
     _ensure_op_and_topic(bot)
-    bot.reply("Erledigt (Op ggf. bei ChanServ angefragt, Topic gesetzt).")
+    _ensure_nick(bot)
+    bot.reply("Erledigt (Nick/Op ggf. angefragt, Topic gesetzt).")
