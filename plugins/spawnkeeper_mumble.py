@@ -262,6 +262,7 @@ class MumbleClientThread(threading.Thread):
             self.bot.say(f"[Mumble] {name} hat den Server verlassen.", IRC_CHANNEL)
         session = user.get("session")
         self.muted_in_afk.discard(session)
+        self.afk_users.discard(name)
         self._update_user_list()
 
     def _user_updated(self, user, action=None):
